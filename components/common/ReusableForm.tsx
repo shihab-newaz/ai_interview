@@ -1,78 +1,5 @@
+// components/common/ReusableForm.tsx
 "use client";
-
-/**
- * ReusableForm Component - A flexible form component for React applications
- * 
- * Usage Guide:
- * -------------
- * 1. Define your Zod schema:
- *    ```
- *    const FormSchema = z.object({
- *      username: z.string().min(3, "Username must be at least 3 characters"),
- *      email: z.string().email("Please enter a valid email"),
- *      password: z.string().min(8, "Password must be at least 8 characters")
- *    });
- *    ```
- * 
- * 2. Set up your form with react-hook-form:
- *    ```
- *    const form = useForm<z.infer<typeof FormSchema>>({
- *      resolver: zodResolver(FormSchema),
- *      defaultValues: {
- *        username: "",
- *        email: "",
- *        password: ""
- *      }
- *    });
- *    ```
- * 
- * 3. Define your form submission handler:
- *    ```
- *    function onSubmit(values: z.infer<typeof FormSchema>) {
- *      console.log(values);
- *      // Process form submission here
- *    }
- *    ```
- * 
- * 4. Configure your fields:
- *    ```
- *    const fields = {
- *      username: {
- *        label: "Username",
- *        description: "Your unique username",
- *        type: "text", // optional, defaults to "text"
- *        placeholder: "johndoe" // optional, defaults to label
- *      },
- *      email: {
- *        label: "Email Address",
- *        type: "email"
- *      },
- *      password: {
- *        label: "Password",
- *        type: "password",
- *        description: "Must be at least 8 characters"
- *      }
- *    };
- *    ```
- * 
- * 5. Render the ReusableForm component:
- *    ```
- *    <ReusableForm
- *      form={form}
- *      onSubmit={onSubmit}
- *      fields={fields}
- *      submitText="Create Account"
- *      isLoading={isSubmitting}
- *      additionalContent={<div className="text-center">Additional content here</div>}
- *    />
- *    ```
- * 
- * Additional Features:
- * - submitText: Customize the submit button text (default: "Submit")
- * - submitClassName: Add custom classes to the submit button
- * - isLoading: Set to true to show loading state on submit button
- * - additionalContent: Insert additional React nodes between fields and submit button
- */
 
 import {
   Form,
@@ -82,12 +9,12 @@ import {
   FormMessage,
   FormControl,
   FormDescription,
-} from "@/components/ui/form";
+} from "@/components/ui/form"; // Assuming paths
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { UseFormReturn } from "react-hook-form";
+import { UseFormReturn, Path, UseFormRegisterReturn, FieldValues } from "react-hook-form"; // Import FieldValues
 import { z } from "zod";
-import { Path, UseFormRegisterReturn } from "react-hook-form";
+import React from "react"; // Import React
 
 /**
  * Configuration for each form field
@@ -96,12 +23,12 @@ import { Path, UseFormRegisterReturn } from "react-hook-form";
  * @property register - Optional react-hook-form register return value (usually not needed)
  * @property type - Input type (text, email, password, number, etc.)
  * @property placeholder - Placeholder text for the input
- * @property required - Whether the field is required
+ * @property required - Whether the field is required (often inferred from schema)
  */
 interface FormFieldConfig {
   label: string;
   description?: string;
-  register?: UseFormRegisterReturn;
+  register?: UseFormRegisterReturn; // Note: register is usually handled by FormField render prop
   type?: string;
   placeholder?: string;
   required?: boolean;
@@ -109,20 +36,22 @@ interface FormFieldConfig {
 
 /**
  * Props for the ReusableForm component
- * @template T - Zod schema type
+ * @template TFieldValues - Inferred type from the Zod schema
  * @property form - react-hook-form useForm return value
- * @property onSubmit - Form submission handler function
- * @property fields - Object mapping field names to their configurations
+ * @property onSubmit - Form submission handler function (or handleSubmit result)
+ * @property fields - Object mapping field names (keys from schema) to their configurations. Allows optional fields.
  * @property submitText - Text to display on the submit button
  * @property submitClassName - Additional CSS classes for the submit button
  * @property isLoading - Whether the form is currently submitting
  * @property additionalContent - Optional content to display between fields and submit button
  */
-interface ReusableFormProps<T extends z.ZodType<any, any>> {
-  form: UseFormReturn<z.infer<T>>;
-  onSubmit: (values: z.infer<T>) => void;
+interface ReusableFormProps<TFieldValues extends FieldValues = FieldValues> {
+  form: UseFormReturn<TFieldValues>;
+  // Allow onSubmit to be the result of handleSubmit for flexibility
+  onSubmit: (e?: React.BaseSyntheticEvent) => Promise<void> | void;
+  // Use a mapped type based on the form values. Allows fields to be optional.
   fields: {
-    [key: string]: FormFieldConfig;
+    [key in keyof TFieldValues]?: FormFieldConfig; // Field config is optional for each key
   };
   submitText?: string;
   submitClassName?: string;
@@ -130,7 +59,7 @@ interface ReusableFormProps<T extends z.ZodType<any, any>> {
   additionalContent?: React.ReactNode;
 }
 
-const ReusableForm = <T extends z.ZodType<any, any>>({
+const ReusableForm = <TFieldValues extends FieldValues>({
   form,
   onSubmit,
   fields,
@@ -138,40 +67,48 @@ const ReusableForm = <T extends z.ZodType<any, any>>({
   submitClassName = "",
   isLoading = false,
   additionalContent,
-}: ReusableFormProps<T>) => {
+}: ReusableFormProps<TFieldValues>) => {
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {Object.entries(fields).map(([name, field]) => (
-          <FormField
-            key={name}
-            control={form.control}
-            name={name as Path<z.infer<T>>}
-            render={({ field: formField }) => (
-              <FormItem>
-                <FormLabel>{field.label}</FormLabel>
-                <FormControl>
-                  <Input 
-                    type={field.type || "text"}
-                    placeholder={field.placeholder || field.label} 
-                    {...formField}
-                    {...(field.register || {})}
-                  />
-                </FormControl>
-                {field.description && (
-                  <FormDescription>{field.description}</FormDescription>
+      {/* Use the passed onSubmit directly, assuming it's form.handleSubmit result */}
+      <form onSubmit={onSubmit} className="space-y-6">
+        {/* Filter out undefined fields before mapping */}
+        {Object.entries(fields)
+          .filter(([_, fieldConfig]) => fieldConfig !== undefined)
+          .map(([name, field]) => (
+            // Ensure field is not undefined after filtering
+            field && (
+              <FormField
+                key={name}
+                control={form.control}
+                // Cast name to Path<TFieldValues> which is expected by FormField
+                name={name as Path<TFieldValues>}
+                render={({ field: formFieldRenderProps }) => (
+                  <FormItem>
+                    <FormLabel>{field.label}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type={field.type || "text"}
+                        placeholder={field.placeholder || field.label}
+                        {...formFieldRenderProps} // Spread props from render
+                        // {...(field.register || {})} // Remove - register is handled by render props
+                      />
+                    </FormControl>
+                    {field.description && (
+                      <FormDescription>{field.description}</FormDescription>
+                    )}
+                    <FormMessage /> {/* Displays validation errors */}
+                  </FormItem>
                 )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ))}
-        
+              />
+            )
+          ))}
+
         {additionalContent}
-        
+
         <div className="flex justify-center mt-6">
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             className={`w-full ${submitClassName}`}
             disabled={isLoading}
           >
