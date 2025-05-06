@@ -7,21 +7,22 @@ import { google } from "@ai-sdk/google";
 import { adminDb as db } from "@/firebase/admin"; 
 import { feedbackSchema } from "@/constants";
 
-// --- Type Definitions (Assuming these exist elsewhere or should be defined) ---
 interface CreateFeedbackParams {
   interviewId: string;
   userId: string;
   transcript: Array<{ role: string; content: string }>;
-  feedbackId?: string; // Optional feedbackId for updates
+  feedbackId?: string; 
 }
 
 interface Interview {
   id: string;
-  // Add other interview properties based on your data structure
   userId: string;
-  createdAt: string | Date; // Use consistent type, e.g., string (ISO) or Firestore Timestamp
+  role:string;
+  type: string;
+  techstack: string[];
+  createdAt: string; 
   finalized?: boolean;
-  // ... other fields
+
 }
 
 interface Feedback {
@@ -33,7 +34,7 @@ interface Feedback {
   strengths: string[];
   areasForImprovement: string[];
   finalAssessment: string;
-  createdAt: string | Date; // Use consistent type
+  createdAt: string | Date; 
 }
 
 interface GetFeedbackByInterviewIdParams {
@@ -45,7 +46,6 @@ interface GetLatestInterviewsParams {
   userId: string;
   limit?: number;
 }
-// --- End Type Definitions ---
 
 
 export async function createFeedback(params: CreateFeedbackParams): Promise<{ success: boolean; feedbackId?: string }> {
@@ -84,7 +84,6 @@ export async function createFeedback(params: CreateFeedbackParams): Promise<{ su
       system:
         "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on a specific structured schema.",
     });
-    // --- End AI Generation ---
 
 
     // --- Data Preparation ---
@@ -97,9 +96,8 @@ export async function createFeedback(params: CreateFeedbackParams): Promise<{ su
       strengths: object.strengths,
       areasForImprovement: object.areasForImprovement,
       finalAssessment: object.finalAssessment,
-      createdAt: new Date(), // Use Firestore Timestamp for better querying/ordering
+      createdAt: new Date(), 
     };
-    // --- End Data Preparation ---
 
     // --- Firestore Operation ---
     let feedbackRef;
@@ -114,13 +112,11 @@ export async function createFeedback(params: CreateFeedbackParams): Promise<{ su
       await feedbackRef.set(feedbackData);
       console.log(`New feedback created with ID: ${feedbackRef.id}`);
     }
-    // --- End Firestore Operation ---
 
     return { success: true, feedbackId: feedbackRef.id };
 
   } catch (error) {
     console.error("Error in createFeedback:", error);
-    // Consider more specific error handling or logging
     return { success: false };
   }
 }
@@ -185,13 +181,12 @@ export async function getFeedbackByInterviewId(
 
 export async function getLatestInterviews(
   params: GetLatestInterviewsParams
-): Promise<Interview[]> { // Return empty array instead of null for consistency
+): Promise<Interview[]> {
   const { userId, limit = 20 } = params;
 
    // Validate userId
    if (!userId) {
      console.warn("getLatestInterviews called without a userId to exclude.");
-     // Decide behavior: return all interviews or an empty array? Returning empty for safety.
      return [];
    }
 
@@ -225,15 +220,13 @@ export async function getLatestInterviews(
 
 export async function getInterviewsByUserId(
   userId: string | undefined | null // Accept potentially undefined/null userId
-): Promise<Interview[]> { // Return empty array instead of null
+): Promise<Interview[]> { 
 
-  // --- ADDED CHECK ---
-  // If userId is not a valid string, return an empty array immediately
   if (!userId || typeof userId !== 'string') {
     console.warn("getInterviewsByUserId called with invalid or missing userId.");
-    return []; // Prevent Firestore query with undefined
+    return []; 
   }
-  // --- END ADDED CHECK ---
+  
 
   try {
       const interviewsSnapshot = await db

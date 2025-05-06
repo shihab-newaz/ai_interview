@@ -1,7 +1,7 @@
 // lib/actions/auth.action.ts
 "use server";
 
-import { adminDb as db, adminAuth as auth } from "@/firebase/admin";
+import { adminDb as db, adminAuth as auth, adminDb } from "@/firebase/admin";
 import { cookies } from "next/headers";
 
 const EXPIRATION_TIME = 60 * 60 * 24 * 7 * 1000; // 7 days in milliseconds
@@ -154,7 +154,7 @@ export async function getCurrentUser(): Promise<User | null> {
       console.error(
         "getCurrentUser: Error verifying session cookie or fetching user:",
         error
-      ); 
+      );
     }
     return null;
   }
@@ -164,3 +164,15 @@ export async function isAuthenticated() {
   const user = await getCurrentUser();
   return !!user; //if user='', return false
 }
+
+// export async function getInterviewByUserId(userId: string) {
+//   const interviews = await adminDb
+//     .collection("interviews")
+//     .where("userId", "==", userId)
+//     .orderBy("createdAt", "desc")
+//     .get();
+//   return interviews.docs.map((doc) => ({
+//     id: doc.id,
+//     ...doc.data(),
+//   })) as Interview[];
+// }
