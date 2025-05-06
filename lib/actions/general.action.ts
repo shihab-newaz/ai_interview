@@ -1,9 +1,9 @@
+//lib/actions/general.action.ts
 "use server";
 
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 
-// Assuming adminDb is correctly initialized and exported from here
 import { adminDb as db } from "@/firebase/admin"; 
 import { feedbackSchema } from "@/constants";
 

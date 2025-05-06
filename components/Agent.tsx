@@ -1,20 +1,15 @@
+// components/Agent.tsx
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-
-import { cn } from "@/lib/utils";
-import { vapi } from "@/lib/vapi.sdk";
-import { interviewer } from "@/constants";
+import { CallStatus } from "@/types/interview";
+import { useInterviewData } from "@/hooks/useInterviewData";
+import { useVapiCalls } from "@/hooks/useVapiCalls";
+import { handleApiSubmission } from "@/lib/services/interview-service";
 import { createFeedback } from "@/lib/actions/general.action";
-
-enum CallStatus {
-  INACTIVE = "INACTIVE",
-  CONNECTING = "CONNECTING",
-  ACTIVE = "ACTIVE",
-  FINISHED = "FINISHED",
-}
+import { cn } from "@/lib/utils";
 
 interface SavedMessage {
   role: "user" | "system" | "assistant";
@@ -28,60 +23,26 @@ const Agent = ({
   feedbackId,
   type,
   questions,
+  profileImage,
 }: AgentProps) => {
   const router = useRouter();
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    const onCallStart = () => {
-      setCallStatus(CallStatus.ACTIVE);
-    };
-
-    const onCallEnd = () => {
-      setCallStatus(CallStatus.FINISHED);
-    };
-
-    const onMessage = (message: Message) => {
-      if (message.type === "transcript" && message.transcriptType === "final") {
-        const newMessage = { role: message.role, content: message.transcript };
-        setMessages((prev) => [...prev, newMessage]);
-      }
-    };
-
-    const onSpeechStart = () => {
-      console.log("speech start");
-      setIsSpeaking(true);
-    };
-
-    const onSpeechEnd = () => {
-      console.log("speech end");
-      setIsSpeaking(false);
-    };
-
-    const onError = (error: Error) => {
-      console.log("Error:", error);
-    };
-    
-    //vapi event listeners
-    vapi.on("call-start", onCallStart);
-    vapi.on("call-end", onCallEnd);
-    vapi.on("message", onMessage);
-    vapi.on("speech-start", onSpeechStart);
-    vapi.on("speech-end", onSpeechEnd);
-    vapi.on("error", onError);
-
-    return () => {
-      vapi.off("call-start", onCallStart);
-      vapi.off("call-end", onCallEnd);
-      vapi.off("message", onMessage);
-      vapi.off("speech-start", onSpeechStart);
-      vapi.off("speech-end", onSpeechEnd);
-      vapi.off("error", onError);
-    };
-  }, []);
+  // Custom hooks for interview data and VAPI integration
+  const { interviewData, extractDataFromMessage } = useInterviewData();
+  const { startGenerateWorkflow, startInterviewWorkflow, stopCall } = useVapiCalls({
+    setCallStatus,
+    setIsSpeaking,
+    setMessages,
+    extractDataFromMessage,
+    setError,
+    type,
+  });
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -89,11 +50,11 @@ const Agent = ({
     }
 
     const handleGenerateFeedback = async (messages: SavedMessage[]) => {
-      console.log("handleGenerateFeedback");
+      if (!interviewId || !userId) return;
 
       const { success, feedbackId: id } = await createFeedback({
-        interviewId: interviewId!,
-        userId: userId!,
+        interviewId,
+        userId,
         transcript: messages,
         feedbackId,
       });
@@ -101,53 +62,52 @@ const Agent = ({
       if (success && id) {
         router.push(`/interview/${interviewId}/feedback`);
       } else {
-        console.log("Error saving feedback");
+        setError("Failed to save feedback");
+        setTimeout(() => {
+          router.push("/");
+        }, 3000);
+      }
+    };
+
+    const handleCallFinished = async () => {
+      if (type === "generate") {
+        if (!userId || isSubmitting) return;
+        
+        setIsSubmitting(true);
+        try {
+          await handleApiSubmission(interviewData, userId);
+          setTimeout(() => router.push("/"), 1000);
+        } catch (error) {
+          setError(typeof error === 'string' ? error : "Failed to create interview");
+        } finally {
+          setIsSubmitting(false);
+        }
+      } else if (interviewId) {
+        handleGenerateFeedback(messages);
+      } else {
         router.push("/");
       }
     };
 
     if (callStatus === CallStatus.FINISHED) {
-      if (type === "generate") {
-        router.push("/");
-      } else {
-        handleGenerateFeedback(messages);
-      }
+      handleCallFinished();
     }
-  }, [messages, callStatus, feedbackId, interviewId, router, type, userId]);
+  }, [callStatus, messages, feedbackId, interviewId, router, type, userId, isSubmitting, interviewData]);
 
   const handleCall = async () => {
+    setError(null);
     setCallStatus(CallStatus.CONNECTING);
 
     if (type === "generate") {
-      await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
-        variableValues: {
-          username: userName,
-          userid: userId,
-        },
-        clientMessages: [],
-        serverMessages: [],
-      });
+      await startGenerateWorkflow(userName, userId);
     } else {
-      let formattedQuestions = "";
-      if (questions) {
-        formattedQuestions = questions
-          .map((question) => `- ${question}`)
-          .join("\n");
-      }
-
-      await vapi.start(interviewer, {
-        variableValues: {
-          questions: formattedQuestions,
-        },
-        clientMessages: [],
-        serverMessages: [],
-      });
+      await startInterviewWorkflow(questions);
     }
   };
 
   const handleDisconnect = () => {
     setCallStatus(CallStatus.FINISHED);
-    vapi.stop();
+    stopCall();
   };
 
   return (
@@ -172,7 +132,7 @@ const Agent = ({
         <div className="card-border">
           <div className="card-content">
             <Image
-              src="/user-avatar.png"
+              src={profileImage || "/user-avatar.png"}
               alt="profile-image"
               width={539}
               height={539}
@@ -182,6 +142,12 @@ const Agent = ({
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="error-message bg-red-100 p-4 mt-4 rounded-md text-red-700">
+          {error}
+        </div>
+      )}
 
       {messages.length > 0 && (
         <div className="transcript-border">
@@ -201,7 +167,11 @@ const Agent = ({
 
       <div className="w-full flex justify-center">
         {callStatus !== "ACTIVE" ? (
-          <button className="relative btn-call" onClick={() => handleCall()}>
+          <button
+            className="relative btn-call"
+            onClick={() => handleCall()}
+            disabled={isSubmitting}
+          >
             <span
               className={cn(
                 "absolute animate-ping rounded-full opacity-75",
@@ -211,7 +181,9 @@ const Agent = ({
 
             <span className="relative">
               {callStatus === "INACTIVE" || callStatus === "FINISHED"
-                ? "Call"
+                ? isSubmitting
+                  ? "Saving..."
+                  : "Call"
                 : ". . ."}
             </span>
           </button>
