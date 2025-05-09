@@ -24,17 +24,23 @@ export function useVapiCalls({
   
   // Handle VAPI errors properly
   const handleVapiError = (error: any) => {
-    // Check if this is just a normal call ending
+    console.log("VAPI error received:", error);
+    
+    // Check if this is just a normal call ending (not a real error)
     if (
       error?.errorMsg === "Meeting has ended" ||
-      error?.error?.errorMsg === "Meeting has ended"
+      error?.error?.errorMsg === "Meeting has ended" ||
+      (typeof error === 'string' && error.includes("Meeting has ended")) ||
+      (error?.message && error.message.includes("Meeting has ended"))
     ) {
-      // This is expected behavior - the call is ending
+      // This is expected behavior - the call is ending normally
+      console.log("Call ended normally. Not an error.");
       setCallStatus(CallStatus.FINISHED);
       return;
     }
     
-    // For other errors, set error state
+    // For actual errors, set error state and log details
+    console.error("VAPI error details:", error);
     setError(
       typeof error === "string"
         ? error
@@ -42,19 +48,25 @@ export function useVapiCalls({
             error?.message ||
             "An error occurred with the interview service"
     );
+    
+    // If error happens during a call, also set call status to INACTIVE
+    setCallStatus(CallStatus.INACTIVE);
   };
 
   useEffect(() => {
     const onCallStart = () => {
+      console.log("Call started");
       setCallStatus(CallStatus.ACTIVE);
     };
 
     const onCallEnd = () => {
+      console.log("Call ended normally");
       setCallStatus(CallStatus.FINISHED);
     };
 
     const onMessage = (message: VapiMessage) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
+        console.log("Message received:", message.role, message.transcript?.substring(0, 30) + "...");
         const newMessage = { 
           role: message.role as "user" | "system" | "assistant", 
           content: message.transcript as string 
@@ -100,6 +112,7 @@ export function useVapiCalls({
 
   const startGenerateWorkflow = async (userName: string, userId?: string) => {
     try {
+      console.log("Starting generate workflow with:", { userName, userId });
       await vapi.start(process.env.NEXT_PUBLIC_VAPI_WORKFLOW_ID!, {
         variableValues: {
           username: userName,
@@ -109,6 +122,7 @@ export function useVapiCalls({
         serverMessages: [],
       });
     } catch (error) {
+      console.error("Error starting generate workflow:", error);
       handleVapiError(error);
       setCallStatus(CallStatus.INACTIVE);
     }
@@ -116,6 +130,7 @@ export function useVapiCalls({
 
   const startInterviewWorkflow = async (questions?: string[]) => {
     try {
+      console.log("Starting interview workflow with questions:", questions?.length);
       let formattedQuestions = "";
       if (questions) {
         formattedQuestions = questions
@@ -131,13 +146,21 @@ export function useVapiCalls({
         serverMessages: [],
       });
     } catch (error) {
+      console.error("Error starting interview workflow:", error);
       handleVapiError(error);
       setCallStatus(CallStatus.INACTIVE);
     }
   };
 
   const stopCall = () => {
-    vapi.stop();
+    console.log("Stopping call...");
+    try {
+      vapi.stop();
+    } catch (error) {
+      console.error("Error stopping call:", error);
+      // Still set call as finished even if there's an error stopping
+      setCallStatus(CallStatus.FINISHED);
+    }
   };
 
   return {

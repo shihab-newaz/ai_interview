@@ -7,47 +7,6 @@ import { google } from "@ai-sdk/google";
 import { adminDb as db } from "@/firebase/admin"; 
 import { feedbackSchema } from "@/constants";
 
-interface CreateFeedbackParams {
-  interviewId: string;
-  userId: string;
-  transcript: Array<{ role: string; content: string }>;
-  feedbackId?: string; 
-}
-
-interface Interview {
-  id: string;
-  userId: string;
-  role:string;
-  type: string;
-  techstack: string[];
-  createdAt: string; 
-  finalized?: boolean;
-
-}
-
-interface Feedback {
-  id: string;
-  interviewId: string;
-  userId: string;
-  totalScore: number;
-  categoryScores: Record<string, number>;
-  strengths: string[];
-  areasForImprovement: string[];
-  finalAssessment: string;
-  createdAt: string | Date; 
-}
-
-interface GetFeedbackByInterviewIdParams {
-  interviewId: string;
-  userId: string;
-}
-
-interface GetLatestInterviewsParams {
-  userId: string;
-  limit?: number;
-}
-
-
 export async function createFeedback(params: CreateFeedbackParams): Promise<{ success: boolean; feedbackId?: string }> {
   const { interviewId, userId, transcript, feedbackId } = params;
 

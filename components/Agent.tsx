@@ -1,20 +1,15 @@
-// components/Agent.tsx
+// components/Agent.tsx (End Button Fix)
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CallStatus } from "@/types/interview";
+import { CallStatus, SavedMessage } from "@/types/interview";
 import { useInterviewData } from "@/hooks/useInterviewData";
 import { useVapiCalls } from "@/hooks/useVapiCalls";
 import { handleApiSubmission } from "@/lib/services/interview-service";
 import { createFeedback } from "@/lib/actions/general.action";
 import { cn } from "@/lib/utils";
-
-interface SavedMessage {
-  role: "user" | "system" | "assistant";
-  content: string;
-}
 
 const Agent = ({
   userName,
@@ -35,64 +30,143 @@ const Agent = ({
 
   // Custom hooks for interview data and VAPI integration
   const { interviewData, extractDataFromMessage } = useInterviewData();
-  const { startGenerateWorkflow, startInterviewWorkflow, stopCall } = useVapiCalls({
-    setCallStatus,
-    setIsSpeaking,
-    setMessages,
-    extractDataFromMessage,
-    setError,
-    type,
-  });
+  const { startGenerateWorkflow, startInterviewWorkflow, stopCall } =
+    useVapiCalls({
+      setCallStatus,
+      setIsSpeaking,
+      setMessages,
+      extractDataFromMessage,
+      setError,
+      type,
+    });
 
+  // Update last message whenever messages change
   useEffect(() => {
     if (messages.length > 0) {
       setLastMessage(messages[messages.length - 1].content);
+      console.log(`Messages in conversation: ${messages.length}`);
+    }
+  }, [messages]);
+
+  // Handle feedback generation
+  const handleGenerateFeedback = useCallback(async () => {
+    console.log("Generating feedback...");
+    console.log("Interview ID:", interviewId);
+    console.log("User ID:", userId);
+    console.log("Messages count:", messages.length);
+
+    if (!interviewId || !userId) {
+      console.error("Missing interviewId or userId for feedback generation");
+      setError("Missing interview data for feedback generation");
+      return false;
     }
 
-    const handleGenerateFeedback = async (messages: SavedMessage[]) => {
-      if (!interviewId || !userId) return;
+    // Check message count here instead of in the disconnect function
+    if (messages.length < 2) {
+      console.error("Not enough messages for meaningful feedback");
+      setError(
+        "The interview was too short to generate meaningful feedback. Please have a longer conversation next time."
+      );
+      return false;
+    }
 
-      const { success, feedbackId: id } = await createFeedback({
+    setIsSubmitting(true);
+
+    try {
+      const { success, feedbackId: newFeedbackId } = await createFeedback({
         interviewId,
         userId,
         transcript: messages,
         feedbackId,
       });
 
-      if (success && id) {
-        router.push(`/interview/${interviewId}/feedback`);
-      } else {
-        setError("Failed to save feedback");
-        setTimeout(() => {
-          router.push("/");
-        }, 3000);
-      }
-    };
+      console.log("Feedback creation result:", success, newFeedbackId);
 
-    const handleCallFinished = async () => {
-      if (type === "generate") {
-        if (!userId || isSubmitting) return;
-        
-        setIsSubmitting(true);
-        try {
-          await handleApiSubmission(interviewData, userId);
-          setTimeout(() => router.push("/"), 1000);
-        } catch (error) {
-          setError(typeof error === 'string' ? error : "Failed to create interview");
-        } finally {
-          setIsSubmitting(false);
-        }
-      } else if (interviewId) {
-        handleGenerateFeedback(messages);
+      if (success && newFeedbackId) {
+        // Add a delay to ensure the database write is complete
+        console.log("Feedback created successfully:", newFeedbackId);
+        return true;
       } else {
-        router.push("/");
+        console.error("Failed to create feedback");
+        setError("Failed to create feedback. Please try again.");
+        return false;
       }
-    };
-
-    if (callStatus === CallStatus.FINISHED) {
-      handleCallFinished();
+    } catch (error) {
+      console.error("Error in feedback creation:", error);
+      setError(
+        `Error creating feedback: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return false;
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [callStatus, messages, feedbackId, interviewId, router, type, userId, isSubmitting, interviewData]);
+  }, [interviewId, userId, messages, feedbackId]);
+
+  // Handle interview generation
+  const handleInterviewGeneration = useCallback(async () => {
+    if (!userId || isSubmitting) return false;
+
+    setIsSubmitting(true);
+    try {
+      await handleApiSubmission(interviewData, userId);
+      return true;
+    } catch (error) {
+      setError(
+        typeof error === "string" ? error : "Failed to create interview"
+      );
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [userId, isSubmitting, interviewData]);
+
+  // Process call status changes
+  useEffect(() => {
+    const processFinishedCall = async () => {
+      console.log("Processing finished call. Type:", type);
+      console.log("Message count:", messages.length);
+
+      let success = false;
+
+      if (type === "generate") {
+        success = await handleInterviewGeneration();
+        if (success) {
+          // Added delay before redirecting
+          setTimeout(() => router.push("/"), 2000);
+        }
+      }
+      // Handle both "practice" and "interview" types
+      else if (type === "practice" || type === "interview") {
+        success = await handleGenerateFeedback();
+        if (success) {
+          // Added delay before redirecting
+          setTimeout(() => {
+            router.push(`/interview/${interviewId}/feedback`);
+          }, 2000);
+        }
+      }
+
+      if (!success) {
+        setTimeout(() => router.push("/"), 3000);
+      }
+    };
+
+    // Process finished calls
+    if (callStatus === CallStatus.FINISHED && !isSubmitting) {
+      processFinishedCall();
+    }
+  }, [
+    callStatus,
+    messages.length,
+    type,
+    interviewId,
+    router,
+    isSubmitting,
+    handleGenerateFeedback,
+    handleInterviewGeneration,
+  ]);
 
   const handleCall = async () => {
     setError(null);
@@ -106,6 +180,8 @@ const Agent = ({
   };
 
   const handleDisconnect = () => {
+    // FIXED: End the call immediately without any checks
+    console.log("User clicked disconnect. Stopping call immediately...");
     setCallStatus(CallStatus.FINISHED);
     stopCall();
   };
@@ -118,10 +194,10 @@ const Agent = ({
           <div className="avatar">
             <Image
               src="/ai-avatar.png"
-              alt="profile-image"
-              width={65}
-              height={54}
-              className="object-cover"
+              alt="ai-interviewer"
+              width={120}
+              height={120}
+              className="object-cover rounded-full"
             />
             {isSpeaking && <span className="animate-speak" />}
           </div>
@@ -133,9 +209,9 @@ const Agent = ({
           <div className="card-content">
             <Image
               src={profileImage || "/user-avatar.png"}
-              alt="profile-image"
-              width={539}
-              height={539}
+              alt="user"
+              width={120}
+              height={120}
               className="rounded-full object-cover size-[120px]"
             />
             <h3>{userName}</h3>
@@ -149,8 +225,14 @@ const Agent = ({
         </div>
       )}
 
+      {isSubmitting && (
+        <div className="bg-blue-100 p-4 mt-4 rounded-md text-blue-700">
+          Processing interview data... This may take a moment.
+        </div>
+      )}
+
       {messages.length > 0 && (
-        <div className="transcript-border">
+        <div className="transcript-border mt-6">
           <div className="transcript">
             <p
               key={lastMessage}
@@ -165,7 +247,7 @@ const Agent = ({
         </div>
       )}
 
-      <div className="w-full flex justify-center">
+      <div className="w-full flex justify-center mt-6">
         {callStatus !== "ACTIVE" ? (
           <button
             className="relative btn-call"
@@ -182,7 +264,7 @@ const Agent = ({
             <span className="relative">
               {callStatus === "INACTIVE" || callStatus === "FINISHED"
                 ? isSubmitting
-                  ? "Saving..."
+                  ? "Processing..."
                   : "Call"
                 : ". . ."}
             </span>

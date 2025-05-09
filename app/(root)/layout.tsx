@@ -11,9 +11,10 @@ const RootLayout = async ({ children }: { children: ReactNode }) => {
   }
   return (
     <div className="root-layout">
-      <nav>
+      <nav className="flex items-center justify-between px-4 py-2">
         <Link href={"/"} className="flex items-center gap-2">
           <Image src="/logo.svg" alt="logo" height={40} width={40} />
+          <span className="text-2xl font-bold">CodeEcho</span>
         </Link>
       </nav>
       {children}
