@@ -65,18 +65,40 @@ export function useVapiCalls({
     };
 
     const onMessage = (message: VapiMessage) => {
+      // Log the complete message object to see all available data
+      console.log("Raw VAPI message received:", JSON.stringify(message, null, 2));
+      
       if (message.type === "transcript" && message.transcriptType === "final") {
-        console.log("Message received:", message.role, message.transcript?.substring(0, 30) + "...");
+        console.log("Processing transcript message:", {
+          type: message.type,
+          transcriptType: message.transcriptType,
+          role: message.role,
+          content: message.transcript
+        });
+        
         const newMessage = { 
           role: message.role as "user" | "system" | "assistant", 
           content: message.transcript as string 
         };
-        setMessages((prev) => [...prev, newMessage]);
-
+        
+        // Log before state update
+        console.log("Adding new message to state:", newMessage);
+        
+        setMessages((prev) => {
+          const updated = [...prev, newMessage];
+          console.log("Messages state after update:", updated);
+          return updated;
+        });
+    
         // Extract interview data from conversation
         if (type === "generate") {
           extractDataFromMessage(message);
         }
+      } else {
+        console.log("Skipped message - not a final transcript:", {
+          type: message.type,
+          transcriptType: message.transcriptType 
+        });
       }
     };
 
@@ -99,6 +121,7 @@ export function useVapiCalls({
     vapi.on("speech-start", onSpeechStart);
     vapi.on("speech-end", onSpeechEnd);
     vapi.on("error", onError);
+    console.log("VAPI event listeners registered successfully");
 
     return () => {
       vapi.off("call-start", onCallStart);
@@ -109,6 +132,17 @@ export function useVapiCalls({
       vapi.off("error", onError);
     };
   }, [setCallStatus, setIsSpeaking, setMessages, extractDataFromMessage, setError, type]);
+
+
+  useEffect(() => {
+    // Check if VAPI is properly initialized
+    if (!vapi) {
+      console.error("VAPI SDK is not properly initialized!");
+      setError("Interview service is not available. Please refresh the page and try again.");
+    } else {
+      console.log("VAPI SDK is initialized correctly");
+    }
+  }, [setError]);
 
   const startGenerateWorkflow = async (userName: string, userId?: string) => {
     try {
@@ -156,8 +190,10 @@ export function useVapiCalls({
     console.log("Stopping call...");
     try {
       vapi.stop();
+      console.log("Call stop command sent successfully");
     } catch (error) {
       console.error("Error stopping call:", error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
       // Still set call as finished even if there's an error stopping
       setCallStatus(CallStatus.FINISHED);
     }

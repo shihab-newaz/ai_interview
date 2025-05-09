@@ -62,13 +62,13 @@ const Agent = ({
     }
 
     // Check message count here instead of in the disconnect function
-    if (messages.length < 2) {
-      console.error("Not enough messages for meaningful feedback");
-      setError(
-        "The interview was too short to generate meaningful feedback. Please have a longer conversation next time."
-      );
-      return false;
-    }
+    // if (messages.length < 2) {
+    //   console.error("Not enough messages for meaningful feedback");
+    //   setError(
+    //     "The interview was too short to generate meaningful feedback. Please have a longer conversation next time."
+    //   );
+    //   return false;
+    // }
 
     setIsSubmitting(true);
 

@@ -146,39 +146,49 @@ If asked about the role, company, or expectations, provide a clear and relevant 
   serverMessages: [], 
 };
 
-export const feedbackSchema = z.object({
-  totalScore: z.number(),
-  categoryScores: z.tuple([
-    z.object({
-      name: z.literal("Communication Skills"),
-      score: z.number(),
-      comment: z.string(),
-    }),
-    z.object({
-      name: z.literal("Technical Knowledge"),
-      score: z.number(),
-      comment: z.string(),
-    }),
-    z.object({
-      name: z.literal("Problem Solving"),
-      score: z.number(),
-      comment: z.string(),
-    }),
-    z.object({
-      name: z.literal("Cultural Fit"),
-      score: z.number(),
-      comment: z.string(),
-    }),
-    z.object({
-      name: z.literal("Confidence and Clarity"),
-      score: z.number(),
-      comment: z.string(),
-    }),
-  ]),
-  strengths: z.array(z.string()),
-  areasForImprovement: z.array(z.string()),
-  finalAssessment: z.string(),
-});
+// export const feedbackSchema = {
+//   type: "object",
+//   properties: {
+//     totalScore: {
+//       type: "number"
+//     },
+//     categoryScores: {
+//       type: "array",
+//       items: {
+//         type: "object",
+//         properties: {
+//           name: {
+//             type: "string",
+//             enum: ["Communication Skills", "Technical Knowledge", "Problem Solving", "Cultural Fit", "Confidence and Clarity"]
+//           },
+//           score: {
+//             type: "number"
+//           },
+//           comment: {
+//             type: "string"
+//           }
+//         },
+//         required: ["name", "score", "comment"]
+//       }
+//     },
+//     strengths: {
+//       type: "array",
+//       items: {
+//         type: "string"
+//       }
+//     },
+//     areasForImprovement: {
+//       type: "array",
+//       items: {
+//         type: "string"
+//       }
+//     },
+//     finalAssessment: {
+//       type: "string"
+//     }
+//   },
+//   required: ["totalScore", "categoryScores", "strengths", "areasForImprovement", "finalAssessment"]
+// };
 
 export const interviewCovers = [
   "/adobe.png",
